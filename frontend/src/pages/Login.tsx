@@ -58,6 +58,7 @@ export default function Login() {
         console.log(user)
         dispatch(setAuth({user}))
         localStorage.setItem("token", token);
+        localStorage.setItem("user", JSON.stringify(user));
         navigate("/home");
       } else {
         throw new Error(res.data.message || "Invalid email or password.");

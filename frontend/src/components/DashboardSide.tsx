@@ -31,7 +31,7 @@ import { Separator } from "./ui/separator";
 import { useDispatch } from "react-redux";
 import { clearAuth } from "@/store/slice/userSlice";
 import { useSelector } from "react-redux";
-import { RootState } from "@/store/store";
+import store, { RootState } from "@/store/store";
 
 export function DashboardSide() {
   const dispatch = useDispatch();
@@ -76,7 +76,7 @@ export function DashboardSide() {
   const [open, setOpen] = useState(false);
   const user = useSelector((state: RootState) => state.auth.user);
   console.log(user);
-  const userData = user;
+  const userData = JSON.parse(localStorage.getItem("user") || '{}');
 
   const [selectedType, setSelectedType] = useState<ThoughtCardType>(null);
 
@@ -117,7 +117,7 @@ export function DashboardSide() {
               <span className=" p-1 rounded-full">
                 <User className=" rounded-full" />
               </span>
-              {open && <p>{userData?.username}</p>}
+              {open && <p>{userData.username}</p>}
             </div>
             {open && (
               <a onClick={signOutHandler}>
@@ -186,10 +186,102 @@ const Dashboard = () => {
   const [alltags, setAllTags] = useState<{ _id: string; title: string }[]>([])
   const [filteredTags, setFilteredtags] = useState<{ _id: string; title: string }[]>([])
   const [alltagsId, setAlltagsId] = useState<string[]>([])
+  const [formError, setFormError] = useState<{
+    [key: string]: string
+  }>({})
  
+  function getVideoId(youtubeUrl: string): string | null {
+    const regex =  /(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/(?:[^/\n\s]+\/\S+\/|(?:v|e(?:mbed)?)\/|\S*?[?&]v=)|youtu\.be\/)([a-zA-Z0-9_-]{11})/;
 
-  const ImportLinkSubmit = ()=>{
+    const match = youtubeUrl.match(regex);
 
+    return match ? match[1] : null;
+}
+function getTweetId(tweetUrl: string): string | null {
+  const regex = /(?:https?:\/\/)?(?:www\.)?twitter\.com\/(?:[^/]+)\/status\/(\d+)/;
+  const match = tweetUrl.match(regex);
+  return match ? match[1] : null;
+}
+const isValidURL = (url: string) => {
+  const urlRegex = /^(https?:\/\/)?[\w.-]+\.[a-z]{2,}(\/\S*)?$/i
+  return urlRegex.test(url)
+}
+
+const getVidInfo= async(vidId: string):Promise<{ title: string; description: string }> =>{
+try {
+  const res = await fetch(
+    `https://noembed.com/embed?url=https://www.youtube.com/watch?v=${vidId}`
+  )
+  const data = await res.json()
+  const title= data.title || `Youtube Video ${vidId}`
+  const fullDescription =
+        data.author_name + "'s youtube video on - " + title || ''
+      const description = fullDescription.split('\n').slice(0, 5).join('\n')
+      return { title, description }
+} catch (error) {
+  return{
+    title: `This Video (${vidId})`,
+        description: ''
+  }
+}
+}
+
+const addingFixedTags = (fixtag: string) => {
+  const existingTag = alltags.find(
+    tag => tag.title === fixtag.trim().toLowerCase()
+  )
+  if (existingTag) {
+    return existingTag._id
+  }
+}
+
+// Example usage
+const url = "https://twitter.com/elonmusk/status/1617688615324805120";
+const tweetId = getTweetId(url);
+console.log(tweetId); // Output: 1617688615324805120
+
+
+  const ImportLinkSubmit = async (e: React.FormEvent)=>{
+    e.preventDefault()
+    const youtubeVidId= getVideoId(importLink)
+    const tweetId= getTweetId(importLink)
+    // @ts-ignore
+    let importErrors: { [key: string]: string } = {}
+
+    if(youtubeVidId){
+      if(!importLink.trim()|| isValidURL(importLink)){
+        importErrors.importLink = "Please enter a Youtube URL"
+      }
+      if(importLink.trim() === ""){
+        importErrors.importLink="Please enter a Valid Url"
+      }
+      const youtubeRegex= /^(https?:\/\/)?(www\.)?(youtube\.com|youtu\.?be)\/.+$/
+      if(!youtubeRegex.test(importLink)){
+        importErrors.importLink = "Please enter a valid Youtube URL"
+      }
+      const vidId= getVideoId(importLink)
+      if(!vidId){
+        importErrors.importLink= "Invalid Youtube Url"
+      }
+      if(Object.keys(importErrors).length>0){
+        setFormError(importErrors)
+        setTimeout(()=>{
+          setFormError({})
+        },3000)
+      }
+
+      const vidInfo = vidId ? await getVidInfo(vidId) : { title : "" , description : ""}
+      const {title , description } = vidInfo
+
+      const userData = JSON.parse(localStorage.getItem("user")|| "{}")
+      const userId = userData? userData.id : null
+      const tagId= addingFixedTags("youtube")
+      const alltagId :string[]=[]
+      if(tagId){
+        alltagsId[0]= tagId
+      }
+      
+    }
   }
   const onClose = ()=>{
     setIsCreateNewOpen(false)
@@ -286,11 +378,11 @@ const Dashboard = () => {
                               onChange={e => setImportLink(e.target.value)}
                               required
                             />
-                            {/* {validateFormErr.importLink && (
+                            {formError.importLink && (
                               <p className='text-sm text-red-500'>
-                                {validateFormErr.importLink}
+                                {formError.importLink}
                               </p>
-                            )} */}
+                            )}
                             <Button
                               className='mt-3 w-full '
                               disabled={importLink ? false : true}
